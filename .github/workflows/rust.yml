@@ -1,0 +1,128 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows-exe:
+    name: Build Windows UI EXE
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build data
+        uses: Swatinem/rust-cache@v2
+
+      - name: Read app version
+        id: meta
+        shell: pwsh
+        run: |
+          $content = Get-Content -Raw -Path "Cargo.toml"
+          $m = [regex]::Match($content, 'version\s*=\s*"([^"]+)"')
+          if (-not $m.Success) { throw "Version not found in Cargo.toml" }
+          "version=$($m.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build release EXE
+        run: cargo build --release --locked
+
+      - name: Prepare deliverables
+        id: package
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          $exe = "target\release\vrc-ytdlp.exe"
+          if (-not (Test-Path $exe)) { throw "Executable not found at $exe" }
+
+          $dist = "dist"
+          if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
+          New-Item -ItemType Directory -Path $dist | Out-Null
+
+          $artifactExe = Join-Path $dist "vrc-ytdlp-ui-windows-x64.exe"
+          Copy-Item $exe $artifactExe
+
+          $zipName = "vrc-ytdlp-ui-v$env:VERSION-windows-x64.zip"
+          $zipPath = Join-Path $dist $zipName
+          Compress-Archive -Path $artifactExe -DestinationPath $zipPath -Force
+
+          $portableDir = Join-Path $dist "vrc-ytdlp-ui-portable"
+          New-Item -ItemType Directory -Path $portableDir | Out-Null
+          Copy-Item $artifactExe (Join-Path $portableDir "vrc-ytdlp.exe")
+          Copy-Item "config.json" (Join-Path $portableDir "config.json")
+          Copy-Item "setup.ps1" (Join-Path $portableDir "setup.ps1")
+
+          $quickstart = @"
+          vrc-ytdlp Portable Quick Start
+
+          1. Double-click vrc-ytdlp.exe to open the UI.
+          2. If yt-dlp is missing, the app will try to download it automatically.
+          3. If you want ffmpeg and plugins prepared in advance, run setup.ps1 once.
+          4. config.json can be edited from the UI or manually.
+          "@
+          Set-Content -Path (Join-Path $portableDir "QUICKSTART.txt") -Value $quickstart -Encoding utf8
+
+          $portableZipName = "vrc-ytdlp-ui-portable-v$env:VERSION-windows-x64.zip"
+          $portableZipPath = Join-Path $dist $portableZipName
+          Compress-Archive -Path $portableDir -DestinationPath $portableZipPath -Force
+
+          "exe_path=$artifactExe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable_zip_path=$portableZipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload standalone EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vrc-ytdlp-ui-exe
+          path: ${{ steps.package.outputs.exe_path }}
+          if-no-files-found: error
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vrc-ytdlp-ui-zip
+          path: ${{ steps.package.outputs.zip_path }}
+          if-no-files-found: error
+
+      - name: Upload portable package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vrc-ytdlp-ui-portable
+          path: ${{ steps.package.outputs.portable_zip_path }}
+          if-no-files-found: error
+
+      - name: Move latest-preview tag to current main commit
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f latest-preview
+          git push origin refs/tags/latest-preview --force
+
+      - name: Publish latest main prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-preview
+          name: Latest Preview Build
+          prerelease: true
+          files: |
+            ${{ steps.package.outputs.exe_path }}
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.portable_zip_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
