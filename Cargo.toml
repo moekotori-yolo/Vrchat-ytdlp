@@ -1,0 +1,29 @@
+[package]
+name = "vrc-ytdlp"
+version = "0.1.0"
+edition = "2021"
+authors = ["Neko"]
+description = "Proxy requests from VRC to YtDlp"
+repository = ""
+license = "MIT"
+keywords = ["yt-dlp"]
+categories = ["command-line-utilities", "multimedia"]
+
+[[bin]]
+name = "vrc-ytdlp"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "macros", "process", "net", "time", "sync", "io-util", "signal", "fs"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+axum = "0.8"
+tokio-util = { version = "0.7", features = ["io"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Threading"] }

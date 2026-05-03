@@ -1,0 +1,20 @@
+{
+  "ytdlp_location": "./yt-dlp",
+  "ffmpeg_location": "./ffmpeg",
+  "allowed_args": [
+    "--get-url"
+  ],
+  "custom_args": [
+    "--no-check-certificate",
+    "--no-warnings",
+    "--no-cache-dir",
+    "-f",
+    "bv[vcodec^=avc][height<=1080]+ba[acodec^=mp4a]/bv[height<=1080]+ba/b[height<=1080]/b"
+  ],
+  "cookies": false,
+  "cookies_browser": "firefox",
+  "execution_timeout_secs": 120,
+  "update_check_days": 1,
+  "plugin_dirs": "./yt-dlp-plugins",
+  "extractor_args": []
+}
